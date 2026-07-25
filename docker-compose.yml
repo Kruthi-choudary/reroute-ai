@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: reroute
+      POSTGRES_PASSWORD: reroute
+      POSTGRES_DB: reroute
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://reroute:reroute@db:5432/reroute
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
