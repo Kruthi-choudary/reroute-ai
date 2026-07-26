@@ -111,6 +111,7 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
         destination=missed_segment.destination_airport,
         date=missed_segment.scheduled_departure.date(),
         cabin=missed_segment.cabin_class,
+        original_price_usd=missed_segment.price_usd or 0.0,
     )
 
     if not alternatives:
@@ -125,7 +126,7 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
         return
 
     # ── Step 5: Score alternatives ────────────────────────────────
-    preferences = {"preferred_airlines": ["EK", "BA"]}
+    preferences = {"preferred_airlines": []}
     if trip.user and trip.user.preferences:
         preferences = {
             "preferred_airlines": trip.user.preferences.preferred_airlines or [],

@@ -40,13 +40,14 @@ def search_alternative_flights(
     destination: str,
     date: date,
     cabin: str = "ECONOMY",
+    original_price_usd: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """
     Search for alternative flights. Falls back to mock data if
     Amadeus credentials are not configured.
     """
     if not AMADEUS_CLIENT_ID or not AMADEUS_CLIENT_SECRET:
-        return _mock_alternatives(origin, destination, date)
+        return _mock_alternatives(origin, destination, date, original_price_usd)
 
     try:
         token = _get_token()
@@ -65,13 +66,13 @@ def search_alternative_flights(
             timeout=15.0,
         )
         resp.raise_for_status()
-        return _parse_amadeus_response(resp.json())
+        return _parse_amadeus_response(resp.json(), original_price_usd=original_price_usd)
     except Exception as e:
         print(f"[Amadeus] API error: {e} — using mock data")
-        return _mock_alternatives(origin, destination, date)
+        return _mock_alternatives(origin, destination, date, original_price_usd)
 
 
-def _parse_amadeus_response(data: dict) -> List[Dict[str, Any]]:
+def _parse_amadeus_response(data: dict, original_price_usd: float = 0.0) -> List[Dict[str, Any]]:
     results = []
     for offer in data.get("data", []):
         try:
@@ -90,7 +91,7 @@ def _parse_amadeus_response(data: dict) -> List[Dict[str, Any]]:
                 "stops":            len(itinerary["segments"]) - 1,
                 "cabin_class":      "ECONOMY",
                 "total_price_usd":  price,
-                "extra_cost_usd":   max(0, price - 300),   # assume base fare ~$300
+                "extra_cost_usd":   max(0, price - original_price_usd),
                 "on_time_percentage": 80,
                 "source":           "amadeus",
             })
@@ -99,53 +100,31 @@ def _parse_amadeus_response(data: dict) -> List[Dict[str, Any]]:
     return results
 
 
-def _mock_alternatives(origin: str, destination: str, flight_date: date) -> List[Dict[str, Any]]:
+def _mock_alternatives(origin: str, destination: str, flight_date: date, original_price_usd: float = 0.0) -> List[Dict[str, Any]]:
     """
     Deterministic mock flights for demo purposes.
     Same pipeline, same scoring, same policy check — only the data source is fake.
     """
     base = datetime.combine(flight_date, datetime.min.time())
-    return [
-        {
-            "flight_number":      "EK005",
-            "airline":            "EK",
-            "origin":             origin,
-            "destination":        destination,
-            "departure_datetime": (base.replace(hour=17, minute=0)).isoformat(),
-            "arrival_datetime":   (base.replace(hour=21, minute=30)).isoformat(),
-            "stops":              0,
-            "cabin_class":        "ECONOMY",
-            "total_price_usd":    420.0,
-            "extra_cost_usd":     120.0,
-            "on_time_percentage": 88,
-            "source":             "mock",
-        },
-        {
-            "flight_number":      "BA107",
-            "airline":            "BA",
-            "origin":             origin,
-            "destination":        destination,
-            "departure_datetime": (base.replace(hour=16, minute=30)).isoformat(),
-            "arrival_datetime":   (base.replace(hour=21, minute=0)).isoformat(),
-            "stops":              0,
-            "cabin_class":        "ECONOMY",
-            "total_price_usd":    380.0,
-            "extra_cost_usd":     80.0,
-            "on_time_percentage": 82,
-            "source":             "mock",
-        },
-        {
-            "flight_number":      "QR007",
-            "airline":            "QR",
-            "origin":             origin,
-            "destination":        destination,
-            "departure_datetime": (base.replace(hour=19, minute=0)).isoformat(),
-            "arrival_datetime":   (base.replace(hour=23, minute=45)).isoformat(),
-            "stops":              1,
-            "cabin_class":        "ECONOMY",
-            "total_price_usd":    290.0,
-            "extra_cost_usd":     0.0,
-            "on_time_percentage": 75,
-            "source":             "mock",
-        },
+    mock_fares = [
+        ("XX001", "XX", 14, 0,  18, 30, 420.0, 88, 0),
+        ("YY202", "YY", 13, 30, 18,  0, 380.0, 82, 0),
+        ("ZZ310", "ZZ", 16,  0, 22, 45, 290.0, 75, 1),
     ]
+    results = []
+    for flight_number, airline, dep_h, dep_m, arr_h, arr_m, price, otp, stops in mock_fares:
+        results.append({
+            "flight_number":      flight_number,
+            "airline":            airline,
+            "origin":             origin,
+            "destination":        destination,
+            "departure_datetime": base.replace(hour=dep_h, minute=dep_m).isoformat(),
+            "arrival_datetime":   base.replace(hour=arr_h, minute=arr_m).isoformat(),
+            "stops":              stops,
+            "cabin_class":        "ECONOMY",
+            "total_price_usd":    price,
+            "extra_cost_usd":     max(0.0, price - original_price_usd),
+            "on_time_percentage": otp,
+            "source":             "mock",
+        })
+    return results

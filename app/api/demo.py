@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+from typing import Optional
 
 from app.database import get_db
 from app.models import (
@@ -52,6 +53,7 @@ def seed_demo(db: Session = Depends(get_db)):
         estimated_departure=base.replace(hour=10, minute=0),
         estimated_arrival=base.replace(hour=12, minute=30),
         cabin_class="ECONOMY", booking_reference="EK-HYD-001",
+        price_usd=180.0,
         status=FlightStatus.SCHEDULED,
     ))
 
@@ -65,6 +67,7 @@ def seed_demo(db: Session = Depends(get_db)):
         estimated_departure=base.replace(hour=14, minute=0),
         estimated_arrival=base.replace(hour=18, minute=30),
         cabin_class="ECONOMY", booking_reference="EK-DXB-002",
+        price_usd=300.0,
         status=FlightStatus.SCHEDULED,
     ))
 
@@ -98,23 +101,33 @@ def seed_demo(db: Session = Depends(get_db)):
 def inject_disruption(
     trip_id: int,
     delay_minutes: int = 165,
+    segment_id: Optional[int] = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
     """
-    Injects the primary demo disruption: EK527 (HYD→DXB) delayed by 165 minutes.
+    Injects a disruption into any trip segment.
+    segment_id: which segment to delay (defaults to the first segment if not specified).
     This feeds the REAL recovery pipeline — nothing is mocked.
     """
     from app.api.disruptions import DisruptionIn, report_disruption
     from app.core.recovery_orchestrator import start_recovery
 
-    segment = (
-        db.query(FlightSegment)
-        .filter(FlightSegment.trip_id == trip_id, FlightSegment.sequence_order == 1)
-        .first()
-    )
+    if segment_id:
+        segment = db.query(FlightSegment).filter(
+            FlightSegment.id == segment_id,
+            FlightSegment.trip_id == trip_id,
+        ).first()
+    else:
+        segment = (
+            db.query(FlightSegment)
+            .filter(FlightSegment.trip_id == trip_id)
+            .order_by(FlightSegment.sequence_order)
+            .first()
+        )
+
     if not segment:
-        return {"error": "Trip segment not found"}
+        return {"error": "Flight segment not found for this trip"}
 
     new_arrival = segment.scheduled_arrival + timedelta(minutes=delay_minutes)
 
@@ -124,7 +137,7 @@ def inject_disruption(
         disruption_type=DisruptionType.DELAY,
         severity=DisruptionSeverity.CRITICAL,
         new_estimated_arrival=new_arrival,
-        description=f"EK527 delayed by {delay_minutes} minutes — DXB arrival now {new_arrival.strftime('%H:%M')}",
+        description=f"{segment.flight_number} delayed by {delay_minutes} minutes — {segment.destination_airport} arrival now {new_arrival.strftime('%H:%M')}",
     )
 
     result = report_disruption(disruption_data, db)
@@ -159,7 +172,6 @@ def reset_demo(db: Session = Depends(get_db)):
     db.query(Notification).filter(Notification.trip_id == trip.id).delete()
 
     # reset flight segments to original schedule
-    base = datetime(2026, 8, 15)
     segments = db.query(FlightSegment).filter(FlightSegment.trip_id == trip.id).all()
     for seg in segments:
         seg.status = FlightStatus.SCHEDULED

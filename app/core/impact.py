@@ -30,7 +30,7 @@ def is_connection_viable(
     return buffer >= min_buffer_minutes
 
 
-def analyze_trip_impact(trip: Trip) -> Dict[str, Any]:
+def analyze_trip_impact(trip: Trip, min_connection_minutes: int = DEFAULT_MIN_CONNECTION_MINUTES) -> Dict[str, Any]:
     """
     Walks the flight segment dependency chain and identifies all
     downstream impacts from updated estimated arrivals.
@@ -48,14 +48,14 @@ def analyze_trip_impact(trip: Trip) -> Dict[str, Any]:
         outbound = segments[i + 1]
 
         buffer = calculate_connection_buffer(inbound, outbound)
-        viable = buffer >= DEFAULT_MIN_CONNECTION_MINUTES
+        viable = buffer >= min_connection_minutes
 
         impact_entry = {
             "inbound_flight":  inbound.flight_number,
             "outbound_flight": outbound.flight_number,
             "connection_airport": inbound.destination_airport,
             "available_buffer_minutes": buffer,
-            "min_required_minutes": DEFAULT_MIN_CONNECTION_MINUTES,
+            "min_required_minutes": min_connection_minutes,
             "connection_viable": viable,
         }
 
@@ -117,7 +117,7 @@ def analyze_trip_impact(trip: Trip) -> Dict[str, Any]:
             else:
                 downstream.append({"type": "HOTEL", "id": hotel.id, "status": "OK"})
 
-    delayed_segment = segments[0]
+    delayed_segment = max(segments, key=lambda s: s.delay_minutes or 0)
     delay = delayed_segment.delay_minutes or 0
 
     return {

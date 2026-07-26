@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.database import init_db
-from app.api import trips, disruptions, recovery, policies, notifications, demo
+from app.api import trips, disruptions, recovery, policies, notifications, demo, users
 from app.services.websocket import router as ws_router
 
 
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(users.router,         prefix="/api/users",         tags=["Users"])
 app.include_router(trips.router,         prefix="/api/trips",         tags=["Trips"])
 app.include_router(disruptions.router,   prefix="/api/disruptions",   tags=["Disruptions"])
 app.include_router(recovery.router,      prefix="/api/recovery",      tags=["Recovery"])

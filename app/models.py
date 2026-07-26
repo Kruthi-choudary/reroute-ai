@@ -167,6 +167,7 @@ class FlightSegment(Base):
     terminal_destination = Column(String, nullable=True)
     cabin_class          = Column(String, default="ECONOMY")
     booking_reference    = Column(String, nullable=True)
+    price_usd            = Column(Float, nullable=True, default=0.0)
     status               = Column(SAEnum(FlightStatus), default=FlightStatus.SCHEDULED)
     delay_minutes        = Column(Integer, default=0)
 
