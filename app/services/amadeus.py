@@ -9,6 +9,7 @@ from datetime import date, datetime
 from typing import List, Dict, Any
 
 AIRLABS_API_KEY = os.getenv("AIRLABS_API_KEY", "")
+_PROVIDER = os.getenv("FLIGHT_DATA_PROVIDER", "simulated").lower()
 
 _BASE_URL = "https://airlabs.co/api/v9"
 
@@ -22,7 +23,7 @@ def search_alternative_flights(
     cabin: str = "ECONOMY",
     original_price_usd: float = 0.0,
 ) -> List[Dict[str, Any]]:
-    if not AIRLABS_API_KEY:
+    if _PROVIDER == "simulated" or not AIRLABS_API_KEY:
         return _mock_alternatives(origin, destination, date, original_price_usd)
 
     try:

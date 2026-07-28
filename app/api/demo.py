@@ -1,15 +1,23 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+import os
+from fastapi import APIRouter, Depends, BackgroundTasks, Header, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
 
 from app.database import get_db
+
+_DEMO_SECRET = os.getenv("DEMO_SECRET", "")
+
+
+def _verify_demo_secret(x_demo_secret: str = Header(default="")):
+    if _DEMO_SECRET and x_demo_secret != _DEMO_SECRET:
+        raise HTTPException(403, "Invalid demo secret")
 from app.models import (
     User, TravelerPreference, PolicyRule, Trip, FlightSegment,
     HotelBooking, Transfer, TripStatus, FlightStatus, DisruptionType, DisruptionSeverity
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(_verify_demo_secret)])
 
 DEMO_USER_ID = 1
 

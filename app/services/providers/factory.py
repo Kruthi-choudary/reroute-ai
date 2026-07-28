@@ -18,7 +18,7 @@ def get_provider() -> FlightDataProvider:
 
 
 def _build() -> FlightDataProvider:
-    name = os.getenv("FLIGHT_DATA_PROVIDER", "airlabs").lower()
+    name = os.getenv("FLIGHT_DATA_PROVIDER", "simulated").lower()
     if name == "simulated":
         from .simulated import SimulatedProvider
         return SimulatedProvider()
