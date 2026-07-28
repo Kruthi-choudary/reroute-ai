@@ -1,0 +1,16 @@
+{
+  "description": "EK527 delayed 165 min — missed connection at DXB, full recovery triggered",
+  "flights": {
+    "EK527": {
+      "states": [
+        {"status": "scheduled", "arr_delayed_min": 0,   "dep_delayed_min": 0},
+        {"status": "scheduled", "arr_delayed_min": 165, "dep_delayed_min": 90}
+      ]
+    },
+    "EK003": {
+      "states": [
+        {"status": "scheduled", "arr_delayed_min": 0, "dep_delayed_min": 0}
+      ]
+    }
+  }
+}

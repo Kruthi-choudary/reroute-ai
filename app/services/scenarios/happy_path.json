@@ -1,0 +1,19 @@
+{
+  "description": "All flights on time — no disruption triggered",
+  "flights": {
+    "EK527": {
+      "states": [
+        {"status": "scheduled",  "arr_delayed_min": 0, "dep_delayed_min": 0},
+        {"status": "en-route",   "arr_delayed_min": 0, "dep_delayed_min": 0},
+        {"status": "landed",     "arr_delayed_min": 0, "dep_delayed_min": 0}
+      ]
+    },
+    "EK003": {
+      "states": [
+        {"status": "scheduled",  "arr_delayed_min": 0, "dep_delayed_min": 0},
+        {"status": "en-route",   "arr_delayed_min": 0, "dep_delayed_min": 0},
+        {"status": "landed",     "arr_delayed_min": 0, "dep_delayed_min": 0}
+      ]
+    }
+  }
+}

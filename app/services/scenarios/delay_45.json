@@ -1,0 +1,16 @@
+{
+  "description": "EK527 delayed 45 min — connection buffer tight but survives",
+  "flights": {
+    "EK527": {
+      "states": [
+        {"status": "scheduled", "arr_delayed_min": 0,  "dep_delayed_min": 0},
+        {"status": "scheduled", "arr_delayed_min": 45, "dep_delayed_min": 30}
+      ]
+    },
+    "EK003": {
+      "states": [
+        {"status": "scheduled", "arr_delayed_min": 0, "dep_delayed_min": 0}
+      ]
+    }
+  }
+}

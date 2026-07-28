@@ -1,0 +1,17 @@
+{
+  "description": "EK527 on time but EK003 departs early — missed connection window",
+  "flights": {
+    "EK527": {
+      "states": [
+        {"status": "scheduled", "arr_delayed_min": 0,  "dep_delayed_min": 0},
+        {"status": "en-route",  "arr_delayed_min": 10, "dep_delayed_min": 0}
+      ]
+    },
+    "EK003": {
+      "states": [
+        {"status": "scheduled",  "arr_delayed_min": 0,   "dep_delayed_min": -20},
+        {"status": "en-route",   "arr_delayed_min": 0,   "dep_delayed_min": -20}
+      ]
+    }
+  }
+}
