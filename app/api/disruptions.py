@@ -6,7 +6,7 @@ from datetime import datetime
 import hashlib, json
 
 from app.database import get_db
-from app.models import DisruptionEvent, DisruptionType, DisruptionSeverity, FlightSegment
+from app.models import DisruptionEvent, DisruptionType, DisruptionSeverity, FlightSegment, FlightStatus
 
 router = APIRouter()
 
@@ -49,7 +49,7 @@ def report_disruption(data: DisruptionIn, db: Session = Depends(get_db)):
         delay = int((data.new_estimated_arrival - segment.scheduled_arrival).total_seconds() / 60)
         segment.estimated_arrival = data.new_estimated_arrival
         segment.delay_minutes = max(0, delay)
-        segment.status = "DELAYED"
+        segment.status = FlightStatus.DELAYED
 
     if data.new_estimated_departure:
         segment.estimated_departure = data.new_estimated_departure

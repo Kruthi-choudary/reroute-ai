@@ -10,7 +10,7 @@ from app.database import SessionLocal
 from app.models import (
     Trip, FlightSegment, DisruptionEvent, RecoveryPlan, RecoveryAction,
     AuditLog, Notification, TripStatus, RecoveryPlanStatus, PolicyDecision,
-    ActionType, ActionStatus, AuditActor, NotificationChannel
+    ActionType, ActionStatus, AuditActor, NotificationChannel, FlightStatus
 )
 from app.core.impact import analyze_trip_impact
 from app.core.scoring import rank_alternatives, build_score_explanation
@@ -227,6 +227,30 @@ def _execute_plan(db: Session, plan: RecoveryPlan, trip: Trip, best_flight: dict
         db.commit()
         broadcast(trip.id, {"event": "ACTION_COMPLETED", "type": "REBOOK_FLIGHT"})
         results.append(("REBOOK_FLIGHT", "COMPLETED"))
+
+        # Update the itinerary segment so it reflects the new flight
+        seg = db.query(FlightSegment).filter(
+            FlightSegment.trip_id == trip.id,
+            FlightSegment.origin_airport == best_flight.get("origin"),
+            FlightSegment.destination_airport == best_flight.get("destination"),
+        ).first()
+        if seg:
+            seg.flight_number = best_flight.get("flight_number", seg.flight_number)
+            seg.airline = best_flight.get("airline", seg.airline)
+            seg.booking_reference = f"RR-{plan.id}-NEW"
+            seg.delay_minutes = 0
+            seg.status = FlightStatus.SCHEDULED
+            if best_flight.get("departure_datetime"):
+                try:
+                    seg.estimated_departure = datetime.fromisoformat(best_flight["departure_datetime"])
+                except ValueError:
+                    pass
+            if best_flight.get("arrival_datetime"):
+                try:
+                    seg.estimated_arrival = datetime.fromisoformat(best_flight["arrival_datetime"])
+                except ValueError:
+                    pass
+            db.commit()
 
     # Action 2: Modify hotel if needed
     hotel_impacts = [d for d in impact.get("downstream_impacts", []) if d["type"] == "HOTEL" and d["status"] != "OK"]

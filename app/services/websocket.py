@@ -2,7 +2,8 @@
 WebSocket manager — broadcasts real-time recovery events to the frontend.
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, List
+from typing import Dict, List, Optional
+import asyncio
 import json
 
 router = APIRouter()
@@ -10,9 +11,16 @@ router = APIRouter()
 # trip_id → list of connected websockets
 _connections: Dict[int, List[WebSocket]] = {}
 
+# Reference to the main event loop — captured on first WS connect.
+# Background threads use this to schedule sends via run_coroutine_threadsafe.
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+
 
 @router.websocket("/ws/{trip_id}")
 async def websocket_endpoint(websocket: WebSocket, trip_id: int):
+    global _main_loop
+    _main_loop = asyncio.get_event_loop()
+
     await websocket.accept()
     _connections.setdefault(trip_id, []).append(websocket)
     try:
@@ -26,20 +34,24 @@ async def websocket_endpoint(websocket: WebSocket, trip_id: int):
 
 def broadcast(trip_id: int, payload: dict):
     """
-    Synchronous broadcast — called from background tasks.
-    Uses send_sync pattern via the WebSocket's underlying transport.
+    Synchronous broadcast — called from background tasks/threads.
+    Schedules sends on the main event loop via run_coroutine_threadsafe.
     """
-    import asyncio
     message = json.dumps(payload)
     connections = _connections.get(trip_id, [])
+    if not connections or _main_loop is None:
+        return
+
     dead = []
     for ws in connections:
         try:
-            # Run async send in a new event loop if called from a thread
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(ws.send_text(message))
-            loop.close()
+            future = asyncio.run_coroutine_threadsafe(ws.send_text(message), _main_loop)
+            future.result(timeout=5)
         except Exception:
             dead.append(ws)
+
     for ws in dead:
-        connections.remove(ws)
+        try:
+            connections.remove(ws)
+        except ValueError:
+            pass
