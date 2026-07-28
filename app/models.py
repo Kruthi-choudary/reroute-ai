@@ -131,13 +131,13 @@ class Trip(Base):
     __tablename__ = "trips"
 
     id             = Column(Integer, primary_key=True, index=True)
-    user_id        = Column(Integer, ForeignKey("users.id"))
+    user_id        = Column(Integer, ForeignKey("users.id"), index=True)
     name           = Column(String, nullable=False)           # "London Business Trip"
     origin         = Column(String, nullable=False)           # "HYD"
     destination    = Column(String, nullable=False)           # "LHR"
     departure_date = Column(DateTime, nullable=False)
     return_date    = Column(DateTime, nullable=True)
-    status         = Column(SAEnum(TripStatus), default=TripStatus.HEALTHY)
+    status         = Column(SAEnum(TripStatus), default=TripStatus.HEALTHY, index=True)
     created_at     = Column(DateTime, default=datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -154,7 +154,7 @@ class FlightSegment(Base):
     __tablename__ = "flight_segments"
 
     id                   = Column(Integer, primary_key=True, index=True)
-    trip_id              = Column(Integer, ForeignKey("trips.id"))
+    trip_id              = Column(Integer, ForeignKey("trips.id"), index=True)
     sequence_order       = Column(Integer, nullable=False)    # 1, 2, 3 ...
     flight_number        = Column(String, nullable=False)     # "EK527"
     airline              = Column(String, nullable=False)     # "EK"
@@ -179,7 +179,7 @@ class HotelBooking(Base):
     __tablename__ = "hotel_bookings"
 
     id                = Column(Integer, primary_key=True, index=True)
-    trip_id           = Column(Integer, ForeignKey("trips.id"))
+    trip_id           = Column(Integer, ForeignKey("trips.id"), index=True)
     property_name     = Column(String, nullable=False)
     city              = Column(String, nullable=False)
     check_in_date     = Column(DateTime, nullable=False)
@@ -196,7 +196,7 @@ class Transfer(Base):
     __tablename__ = "transfers"
 
     id                = Column(Integer, primary_key=True, index=True)
-    trip_id           = Column(Integer, ForeignKey("trips.id"))
+    trip_id           = Column(Integer, ForeignKey("trips.id"), index=True)
     pickup_location   = Column(String, nullable=False)        # "LHR Terminal 5"
     pickup_time       = Column(DateTime, nullable=False)
     destination       = Column(String, nullable=False)        # "London City Hotel"
@@ -210,8 +210,8 @@ class DisruptionEvent(Base):
     __tablename__ = "disruption_events"
 
     id                 = Column(Integer, primary_key=True, index=True)
-    trip_id            = Column(Integer, ForeignKey("trips.id"))
-    flight_segment_id  = Column(Integer, ForeignKey("flight_segments.id"), nullable=True)
+    trip_id            = Column(Integer, ForeignKey("trips.id"), index=True)
+    flight_segment_id  = Column(Integer, ForeignKey("flight_segments.id"), nullable=True, index=True)
     idempotency_key    = Column(String, unique=True, index=True)  # prevents duplicate processing
     disruption_type    = Column(SAEnum(DisruptionType), nullable=False)
     severity           = Column(SAEnum(DisruptionSeverity), default=DisruptionSeverity.MEDIUM)
@@ -230,8 +230,8 @@ class RecoveryPlan(Base):
     __tablename__ = "recovery_plans"
 
     id                  = Column(Integer, primary_key=True, index=True)
-    trip_id             = Column(Integer, ForeignKey("trips.id"))
-    disruption_event_id = Column(Integer, ForeignKey("disruption_events.id"))
+    trip_id             = Column(Integer, ForeignKey("trips.id"), index=True)
+    disruption_event_id = Column(Integer, ForeignKey("disruption_events.id"), index=True)
     strategy            = Column(Text, nullable=True)         # human-readable plan summary
     total_extra_cost    = Column(Float, default=0.0)
     reasoning           = Column(Text, nullable=True)         # AI + scoring explanation
@@ -251,7 +251,7 @@ class RecoveryAction(Base):
     __tablename__ = "recovery_actions"
 
     id               = Column(Integer, primary_key=True, index=True)
-    recovery_plan_id = Column(Integer, ForeignKey("recovery_plans.id"))
+    recovery_plan_id = Column(Integer, ForeignKey("recovery_plans.id"), index=True)
     action_type      = Column(SAEnum(ActionType), nullable=False)
     status           = Column(SAEnum(ActionStatus), default=ActionStatus.PENDING)
     idempotency_key  = Column(String, unique=True, index=True)
@@ -268,8 +268,8 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"))
-    trip_id    = Column(Integer, ForeignKey("trips.id"), nullable=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), index=True)
+    trip_id    = Column(Integer, ForeignKey("trips.id"), nullable=True, index=True)
     channel    = Column(SAEnum(NotificationChannel), default=NotificationChannel.IN_APP)
     subject    = Column(String, nullable=True)
     message    = Column(Text, nullable=False)
@@ -282,8 +282,8 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id               = Column(Integer, primary_key=True, index=True)
-    trip_id          = Column(Integer, ForeignKey("trips.id"), nullable=True)
-    recovery_plan_id = Column(Integer, ForeignKey("recovery_plans.id"), nullable=True)
+    trip_id          = Column(Integer, ForeignKey("trips.id"), nullable=True, index=True)
+    recovery_plan_id = Column(Integer, ForeignKey("recovery_plans.id"), nullable=True, index=True)
     actor            = Column(SAEnum(AuditActor), default=AuditActor.SYSTEM)
     action           = Column(String, nullable=False)   # "DISRUPTION_DETECTED", "PLAN_CREATED" etc.
     inputs           = Column(JSON, nullable=True)

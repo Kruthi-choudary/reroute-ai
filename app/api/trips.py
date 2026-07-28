@@ -57,7 +57,7 @@ def list_trips(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     q = db.query(Trip)
     if user_id:
         q = q.filter(Trip.user_id == user_id)
-    return q.order_by(Trip.created_at.desc()).all()
+    return q.order_by(Trip.created_at.desc()).limit(50).all()
 
 
 @router.get("/{trip_id}")

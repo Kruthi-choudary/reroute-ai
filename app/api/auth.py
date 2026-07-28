@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 class RegisterIn(BaseModel):
-    email:    str
+    email:    EmailStr
     name:     str
     password: str
     phone:    Optional[str] = None

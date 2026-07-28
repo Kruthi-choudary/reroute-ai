@@ -5,11 +5,13 @@ Deliberately provider-agnostic: calls FlightDataProvider.get_flight_status()
 and never imports AirLabsProvider or SimulatedProvider directly.
 """
 import logging
+import os
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy.orm import joinedload
 from app.database import SessionLocal
 from app.models import (
     Trip, FlightSegment, DisruptionEvent,
@@ -17,8 +19,8 @@ from app.models import (
 )
 from app.services.providers import get_provider, FlightStatusResult
 
-DELAY_THRESHOLD   = 30    # minutes — detect disruption above this
-LOOKAHEAD_HOURS   = 6     # only check segments departing within this window
+DELAY_THRESHOLD   = int(os.getenv("MONITOR_DELAY_THRESHOLD_MIN", "30"))
+LOOKAHEAD_HOURS   = int(os.getenv("MONITOR_LOOKAHEAD_HOURS", "6"))
 POLL_INTERVAL_SEC = 300   # overridden by env var in main.py
 
 logger = logging.getLogger("monitor")
@@ -50,7 +52,9 @@ def check_active_trips() -> None:
     found    = 0
 
     try:
-        active = db.query(Trip).filter(
+        active = db.query(Trip).options(
+            joinedload(Trip.flight_segments)
+        ).filter(
             Trip.status.in_([TripStatus.HEALTHY, TripStatus.AT_RISK])
         ).all()
 
