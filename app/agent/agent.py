@@ -27,12 +27,15 @@ def run_recovery_agent(
     Generates a natural language explanation of the recovery decision.
     Returns a string — purely informational, not authoritative.
     """
-    api_key = os.getenv("OPENAI_API_KEY", "")
+    api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
         return _fallback_explanation(trip, impact, best_flight, policy_result)
 
     from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
 
     prompt = f"""
 Trip: {trip.name} ({trip.origin} → {trip.destination})
@@ -60,7 +63,7 @@ Be specific about the flights and timing. Do not repeat the policy reason verbat
 
     try:
         response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -70,7 +73,7 @@ Be specific about the flights and timing. Do not repeat the policy reason verbat
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"[Agent] OpenAI error: {e} — using fallback explanation")
+        print(f"[Agent] Groq error: {e} — using fallback explanation")
         return _fallback_explanation(trip, impact, best_flight, policy_result)
 
 
