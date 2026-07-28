@@ -48,6 +48,14 @@ def update_policy(user_id: int, data: PolicyUpdate, db: Session = Depends(get_db
     return policy
 
 
+@router.get("/{user_id}/preferences")
+def get_preferences(user_id: int, db: Session = Depends(get_db)):
+    pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == user_id).first()
+    if not pref:
+        raise HTTPException(404, "Preferences not found")
+    return pref
+
+
 @router.put("/{user_id}/preferences")
 def update_preferences(user_id: int, data: PreferenceUpdate, db: Session = Depends(get_db)):
     pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == user_id).first()
