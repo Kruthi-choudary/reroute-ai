@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ReRoute AI — Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header span { color: #8b949e; font-size: 13px; }
+
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 0; height: calc(100vh - 53px); }
+
+  .panel { border-right: 1px solid #30363d; overflow-y: auto; }
+  .panel-head { padding: 12px 16px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #8b949e; display: flex; align-items: center; justify-content: space-between; }
+
+  /* Trip panel */
+  .trip-status { padding: 16px; border-bottom: 1px solid #30363d; }
+  .route { font-size: 20px; font-weight: 700; letter-spacing: .04em; margin-bottom: 6px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge.HEALTHY    { background: #0d2a15; color: #3fb950; border: 1px solid #26a641; }
+  .badge.DISRUPTED  { background: #2d1212; color: #f85149; border: 1px solid #da3633; }
+  .badge.RECOVERING { background: #1c1a09; color: #e3b341; border: 1px solid #9e6a03; }
+  .badge.RESOLVED   { background: #0d2233; color: #58a6ff; border: 1px solid #1f6feb; }
+
+  .segments { padding: 12px 16px; }
+  .seg { padding: 10px 12px; margin-bottom: 8px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; }
+  .seg-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .seg-flight { font-weight: 600; font-size: 13px; }
+  .seg-status { font-size: 11px; color: #8b949e; }
+  .seg-status.DELAYED { color: #f85149; }
+  .seg-route { font-size: 13px; color: #8b949e; }
+  .seg-time { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .seg-delay { font-size: 11px; color: #f85149; margin-top: 3px; font-weight: 500; }
+
+  .hotel-block { padding: 8px 16px 12px; border-top: 1px solid #30363d; }
+  .hotel-label { font-size: 11px; color: #8b949e; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .06em; }
+  .hotel-name { font-size: 13px; color: #e6edf3; }
+
+  /* Actions */
+  .actions { padding: 14px 16px; border-top: 1px solid #30363d; display: flex; flex-direction: column; gap: 8px; }
+  button { padding: 8px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity .15s; }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-seed     { background: #238636; color: #fff; }
+  .btn-disrupt  { background: #da3633; color: #fff; }
+  .btn-reset    { background: #30363d; color: #e6edf3; }
+
+  /* Recovery panel */
+  .recovery { padding: 0; }
+
+  .step { display: flex; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #21262d; }
+  .step-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .step-icon.done    { background: #0d2a15; color: #3fb950; border: 1px solid #26a641; }
+  .step-icon.running { background: #1c1a09; color: #e3b341; border: 1px solid #9e6a03; }
+  .step-icon.pending { background: #161b22; color: #8b949e; border: 1px solid #30363d; }
+  .step-body { flex: 1; min-width: 0; }
+  .step-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .step-detail { color: #8b949e; font-size: 12px; line-height: 1.5; }
+
+  .alternatives { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .alt { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+  .alt-top { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 3px; }
+  .alt-meta { color: #8b949e; font-size: 11px; }
+  .alt-source { font-size: 10px; color: #3fb950; background: #0d2a15; padding: 1px 5px; border-radius: 3px; border: 1px solid #26a641; }
+  .alt.selected { border-color: #58a6ff; }
+
+  .reasoning-box { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #c9d1d9; line-height: 1.6; white-space: pre-wrap; margin-top: 8px; }
+  .policy-box { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .policy-decision { font-weight: 700; font-size: 13px; }
+  .policy-decision.AUTO_APPROVE   { color: #3fb950; }
+  .policy-decision.AWAITING_APPROVAL { color: #e3b341; }
+  .policy-decision.DECLINED       { color: #f85149; }
+  .cost-badge { background: #0d2233; color: #58a6ff; border: 1px solid #1f6feb; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
+
+  .empty { padding: 40px 20px; text-align: center; color: #8b949e; font-size: 13px; line-height: 1.8; }
+  .pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .log { font-family: monospace; font-size: 11px; color: #8b949e; padding: 6px 20px; border-bottom: 1px solid #21262d; }
+  .log span { color: #e6edf3; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg>
+  <h1>ReRoute AI</h1>
+  <span>Travel Disruption Recovery Demo</span>
+</header>
+
+<div class="layout">
+
+  <!-- Left: Trip panel -->
+  <div class="panel" id="tripPanel">
+    <div class="panel-head">
+      <span>Trip</span>
+      <span id="tripId" style="color:#58a6ff;display:none"></span>
+    </div>
+
+    <div id="tripEmpty" class="empty">
+      No demo trip seeded.<br>Click <strong>Seed Demo</strong> to start.
+    </div>
+
+    <div id="tripContent" style="display:none">
+      <div class="trip-status">
+        <div class="route" id="tripRoute">HYD → LHR</div>
+        <div id="tripName" style="color:#8b949e;font-size:12px;margin-bottom:8px"></div>
+        <span class="badge HEALTHY" id="tripStatusBadge">HEALTHY</span>
+      </div>
+
+      <div class="panel-head" style="margin-top:0">Flights</div>
+      <div class="segments" id="segmentsContainer"></div>
+
+      <div class="hotel-block" id="hotelBlock" style="display:none">
+        <div class="hotel-label">Hotel</div>
+        <div class="hotel-name" id="hotelName"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-seed"    id="btnSeed"    onclick="seedDemo()">Seed Demo</button>
+      <button class="btn-disrupt" id="btnDisrupt" onclick="injectDisruption()" disabled>Inject Disruption (165 min delay)</button>
+      <button class="btn-reset"   id="btnReset"   onclick="resetDemo()" disabled>Reset</button>
+    </div>
+  </div>
+
+  <!-- Right: Recovery pipeline -->
+  <div id="recoveryPanel">
+    <div class="panel-head">Recovery Pipeline</div>
+
+    <div id="recoveryEmpty" class="empty">
+      Waiting for a disruption.<br>Seed the demo then inject a disruption to watch the pipeline run.
+    </div>
+
+    <div id="recoveryContent" style="display:none"></div>
+  </div>
+
+</div>
+
+<script>
+const API = '';
+let tripId = null;
+let pollTimer = null;
+
+// ── Seed ──────────────────────────────────────────────────────────────────
+async function seedDemo() {
+  setBtn('btnSeed', true, 'Seeding…');
+  const r = await api('POST', '/api/demo/seed');
+  tripId = r.trip_id ?? r.id;
+  document.getElementById('tripId').textContent = `#${tripId}`;
+  document.getElementById('tripId').style.display = '';
+  await loadTrip();
+  setBtn('btnSeed', false, 'Re-seed');
+  setBtn('btnDisrupt', false);
+  setBtn('btnReset', false);
+}
+
+// ── Load trip ─────────────────────────────────────────────────────────────
+async function loadTrip() {
+  if (!tripId) return;
+  const t = await api('GET', `/api/trips/${tripId}`);
+  renderTrip(t);
+}
+
+function renderTrip(t) {
+  document.getElementById('tripEmpty').style.display = 'none';
+  document.getElementById('tripContent').style.display = '';
+
+  document.getElementById('tripRoute').textContent = `${t.origin} → ${t.destination}`;
+  document.getElementById('tripName').textContent = t.name;
+
+  const badge = document.getElementById('tripStatusBadge');
+  badge.textContent = t.status;
+  badge.className = `badge ${t.status}`;
+
+  // Segments
+  const seg = document.getElementById('segmentsContainer');
+  seg.innerHTML = '';
+  (t.flights || []).sort((a,b) => a.sequence_order - b.sequence_order).forEach(f => {
+    const delayed = f.delay_minutes > 0;
+    seg.innerHTML += `
+      <div class="seg">
+        <div class="seg-header">
+          <span class="seg-flight">${f.flight_number}</span>
+          <span class="seg-status ${delayed ? 'DELAYED' : ''}">${delayed ? 'DELAYED' : f.status}</span>
+        </div>
+        <div class="seg-route">${f.origin_airport} → ${f.destination_airport}</div>
+        <div class="seg-time">${fmt(f.scheduled_departure)} → ${fmt(f.scheduled_arrival)}</div>
+        ${delayed ? `<div class="seg-delay">+${f.delay_minutes} min delay</div>` : ''}
+      </div>`;
+  });
+
+  // Hotel
+  const hotel = (t.hotels || [])[0];
+  if (hotel) {
+    document.getElementById('hotelBlock').style.display = '';
+    document.getElementById('hotelName').textContent = `${hotel.property_name}, ${hotel.city}`;
+  }
+}
+
+// ── Inject Disruption ─────────────────────────────────────────────────────
+async function injectDisruption() {
+  setBtn('btnDisrupt', true, 'Injecting…');
+  const r = await api('POST', `/api/demo/disruption?trip_id=${tripId}&delay_minutes=165`);
+  showPipelineRunning();
+  startPolling();
+  setBtn('btnDisrupt', true); // keep disabled until reset
+}
+
+// ── Poll recovery ─────────────────────────────────────────────────────────
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollRecovery, 2000);
+  pollRecovery();
+}
+
+async function pollRecovery() {
+  try {
+    const r = await api('GET', `/api/recovery/${tripId}`);
+    renderRecovery(r);
+    await loadTrip();
+    const done = ['COMPLETED','FAILED','AWAITING_APPROVAL'].includes(r.status);
+    if (done) { clearInterval(pollTimer); pollTimer = null; }
+  } catch(e) {
+    // plan not ready yet — keep polling
+  }
+}
+
+// ── Render pipeline ───────────────────────────────────────────────────────
+function showPipelineRunning() {
+  document.getElementById('recoveryEmpty').style.display = 'none';
+  document.getElementById('recoveryContent').style.display = '';
+  renderSteps(null);
+}
+
+function renderRecovery(plan) {
+  document.getElementById('recoveryEmpty').style.display = 'none';
+  document.getElementById('recoveryContent').style.display = '';
+  renderSteps(plan);
+}
+
+function renderSteps(plan) {
+  const status = plan?.status ?? 'CREATED';
+  const steps = [
+    {
+      key: 'detect',
+      title: 'Disruption Detected',
+      done: true,
+      detail: plan ? `EK527 delayed 165 min → missed connection at DXB` : '…',
+    },
+    {
+      key: 'impact',
+      title: 'Impact Assessment',
+      done: !!plan,
+      running: !plan,
+      detail: plan ? `Miss EK003 DXB→LHR — hotel check-in at risk` : 'Analysing cascading impact on connections and hotel…',
+    },
+    {
+      key: 'flights',
+      title: 'Alternative Flights (AirLabs)',
+      done: !!plan?.selected_flight,
+      running: !!plan && !plan.selected_flight,
+      detail: plan?.selected_flight ? renderAlternatives(plan.selected_flight) : 'Fetching live alternatives via AirLabs API…',
+      html: true,
+    },
+    {
+      key: 'policy',
+      title: 'Policy Engine',
+      done: !!plan?.policy_decision,
+      running: !!plan?.selected_flight && !plan.policy_decision,
+      detail: plan?.policy_decision ? renderPolicy(plan) : 'Checking spend limits and approval thresholds…',
+      html: true,
+    },
+    {
+      key: 'ai',
+      title: 'AI Reasoning (Groq / Llama 3.1)',
+      done: !!plan?.reasoning,
+      running: !!plan?.policy_decision && !plan.reasoning,
+      detail: plan?.reasoning ? `<div class="reasoning-box">${plan.reasoning}</div>` : 'Generating natural language explanation…',
+      html: true,
+    },
+    {
+      key: 'result',
+      title: 'Recovery Plan',
+      done: ['COMPLETED','AWAITING_APPROVAL'].includes(status),
+      running: status === 'EXECUTING',
+      detail: status === 'COMPLETED' ? '✓ Plan executed automatically'
+            : status === 'AWAITING_APPROVAL' ? '⏳ Awaiting traveller approval'
+            : status === 'EXECUTING' ? 'Executing recovery actions…'
+            : '',
+    },
+  ];
+
+  let html = '';
+  steps.forEach(s => {
+    const state = s.done ? 'done' : s.running ? 'running' : 'pending';
+    const icon  = s.done ? '✓' : s.running ? '<span class="pulse">●</span>' : '○';
+    const detail = s.html ? s.detail : `<div class="step-detail">${s.detail}</div>`;
+    html += `
+      <div class="step">
+        <div class="step-icon ${state}">${icon}</div>
+        <div class="step-body">
+          <div class="step-title">${s.title}</div>
+          ${detail}
+        </div>
+      </div>`;
+  });
+
+  document.getElementById('recoveryContent').innerHTML = html;
+}
+
+function renderAlternatives(flights) {
+  if (!flights || !flights.length) return '<div class="step-detail">No alternatives found</div>';
+  const list = (Array.isArray(flights) ? flights : [flights]).slice(0,3);
+  const items = list.map((f,i) => `
+    <div class="alt ${i===0?'selected':''}">
+      <div class="alt-top">
+        <span>${f.flight_number} · ${f.airline}</span>
+        <span>$${f.total_price_usd} <span class="alt-source">${f.source}</span></span>
+      </div>
+      <div class="alt-meta">${f.origin} → ${f.destination} · ${fmtIso(f.departure_datetime)} → ${fmtIso(f.arrival_datetime)}</div>
+    </div>`).join('');
+  return `<div class="alternatives">${items}</div>`;
+}
+
+function renderPolicy(plan) {
+  const cls = plan.policy_decision?.replace(/\s+/g,'_') ?? '';
+  return `
+    <div class="policy-box">
+      <span class="policy-decision ${cls}">${plan.policy_decision}</span>
+      ${plan.total_extra_cost != null ? `<span class="cost-badge">+$${plan.total_extra_cost?.toFixed(2)}</span>` : ''}
+    </div>
+    <div class="step-detail" style="margin-top:4px">${plan.reasoning ? '' : 'Spend within auto-approval limit'}</div>`;
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────
+async function resetDemo() {
+  setBtn('btnReset', true, 'Resetting…');
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  await api('POST', '/api/demo/reset');
+  await loadTrip();
+  document.getElementById('recoveryEmpty').style.display = '';
+  document.getElementById('recoveryContent').style.display = 'none';
+  setBtn('btnDisrupt', false);
+  setBtn('btnReset', false);
+  setBtn('btnReset', false, 'Reset');
+  setBtn('btnSeed', false, 'Re-seed');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + path, opts);
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+function setBtn(id, disabled, label) {
+  const b = document.getElementById(id);
+  if (disabled !== undefined) b.disabled = disabled;
+  if (label) b.textContent = label;
+}
+
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+}
+
+function fmtIso(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+  catch { return iso; }
+}
+</script>
+</body>
+</html>

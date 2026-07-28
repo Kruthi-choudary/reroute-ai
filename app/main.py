@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from app.database import init_db
@@ -34,6 +35,8 @@ app.include_router(policies.router,      prefix="/api/policies",      tags=["Pol
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(demo.router,          prefix="/api/demo",          tags=["Demo"])
 app.include_router(ws_router)
+
+app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
 
 
 @app.get("/")
