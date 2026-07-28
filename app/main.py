@@ -1,10 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from app.database import init_db
-from app.api import trips, disruptions, recovery, policies, notifications, demo, users
+from app.api import trips, disruptions, recovery, policies, notifications, demo, users, auth
+from app.core.auth import get_current_user
 from app.services.websocket import router as ws_router
 
 
@@ -27,13 +28,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(users.router,         prefix="/api/users",         tags=["Users"])
-app.include_router(trips.router,         prefix="/api/trips",         tags=["Trips"])
-app.include_router(disruptions.router,   prefix="/api/disruptions",   tags=["Disruptions"])
-app.include_router(recovery.router,      prefix="/api/recovery",      tags=["Recovery"])
-app.include_router(policies.router,      prefix="/api/policies",      tags=["Policies"])
-app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
-app.include_router(demo.router,          prefix="/api/demo",          tags=["Demo"])
+_auth_dep = [Depends(get_current_user)]
+
+app.include_router(auth.router,          prefix="/api/auth",          tags=["Auth"])
+app.include_router(users.router,         prefix="/api/users",         tags=["Users"],         dependencies=_auth_dep)
+app.include_router(trips.router,         prefix="/api/trips",         tags=["Trips"],         dependencies=_auth_dep)
+app.include_router(disruptions.router,   prefix="/api/disruptions",   tags=["Disruptions"],   dependencies=_auth_dep)
+app.include_router(recovery.router,      prefix="/api/recovery",      tags=["Recovery"],      dependencies=_auth_dep)
+app.include_router(policies.router,      prefix="/api/policies",      tags=["Policies"],      dependencies=_auth_dep)
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"], dependencies=_auth_dep)
+app.include_router(demo.router,          prefix="/api/demo",          tags=["Demo"])   # open — no auth
 app.include_router(ws_router)
 
 app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")

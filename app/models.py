@@ -85,11 +85,12 @@ class AuditActor(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id         = Column(Integer, primary_key=True, index=True)
-    email      = Column(String, unique=True, index=True, nullable=False)
-    name       = Column(String, nullable=False)
-    phone      = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    id            = Column(Integer, primary_key=True, index=True)
+    email         = Column(String, unique=True, index=True, nullable=False)
+    name          = Column(String, nullable=False)
+    phone         = Column(String, nullable=True)
+    password_hash = Column(String, nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
 
     preferences = relationship("TravelerPreference", back_populates="user", uselist=False)
     policy      = relationship("PolicyRule", back_populates="user", uselist=False)
