@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -54,10 +54,22 @@ class TripCreate(BaseModel):
 
 @router.get("/")
 def list_trips(user_id: Optional[int] = None, db: Session = Depends(get_db)):
-    q = db.query(Trip)
+    q = db.query(Trip).options(joinedload(Trip.flight_segments))
     if user_id:
         q = q.filter(Trip.user_id == user_id)
-    return q.order_by(Trip.created_at.desc()).limit(50).all()
+    trips = q.order_by(Trip.created_at.desc()).limit(50).all()
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "origin": t.origin,
+            "destination": t.destination,
+            "departure_date": t.departure_date,
+            "status": t.status,
+            "flights": t.flight_segments,
+        }
+        for t in trips
+    ]
 
 
 @router.get("/{trip_id}")

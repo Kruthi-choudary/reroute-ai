@@ -40,7 +40,7 @@ def get_alternatives(plan_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{plan_id}/approve")
 def approve_recovery(plan_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    from app.core.executor import execute_recovery_plan
+    from app.core.recovery_orchestrator import execute_recovery_plan
     plan = db.query(RecoveryPlan).filter(RecoveryPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(404, "Recovery plan not found")

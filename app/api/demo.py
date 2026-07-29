@@ -23,25 +23,36 @@ DEMO_USER_ID = 1
 
 
 @router.post("/seed")
-def seed_demo(db: Session = Depends(get_db)):
-    """Creates the demo HYD→DXB→LHR trip in a HEALTHY state. Call once before the demo."""
+def seed_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """Creates the demo HYD→DXB→LHR trip in a HEALTHY state. Call once before the demo.
+    Pass ?user_id=X to seed for a specific user (e.g. the one who signed up via the frontend).
+    """
+    # Use the first user in the DB if no user_id provided
+    target_user = None
+    if user_id:
+        target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        target_user = db.query(User).order_by(User.id).first()
 
-    # idempotent — skip if already seeded
-    existing = db.query(User).filter(User.id == DEMO_USER_ID).first()
-    if existing:
-        trip = db.query(Trip).filter(Trip.user_id == DEMO_USER_ID).first()
-        return {"message": "Already seeded", "trip_id": trip.id if trip else None}
-
-    user = User(id=DEMO_USER_ID, email="demo@reroute.ai", name="Demo Traveler", phone="+91-9999999999")
-    db.add(user)
-    db.flush()
-
-    db.add(TravelerPreference(user_id=DEMO_USER_ID, preferred_airlines=["EK", "BA"], preferred_cabin="ECONOMY"))
-    db.add(PolicyRule(user_id=DEMO_USER_ID, auto_spend_limit=150.0, approval_spend_limit=500.0, max_spend_limit=1000.0))
+    if target_user:
+        # User exists — check if they already have a trip
+        trip = db.query(Trip).filter(Trip.user_id == target_user.id).first()
+        if trip:
+            return {"message": "Already seeded", "trip_id": trip.id, "user_id": target_user.id}
+        # User exists but no trip — create trip for them
+        target_user_id = target_user.id
+    else:
+        # No users at all — create the demo user
+        user = User(email="demo@reroute.ai", name="Demo Traveler", phone="+91-9999999999")
+        db.add(user)
+        db.flush()
+        target_user_id = user.id
+        db.add(TravelerPreference(user_id=target_user_id, preferred_airlines=["EK", "BA"], preferred_cabin="ECONOMY"))
+        db.add(PolicyRule(user_id=target_user_id, auto_spend_limit=150.0, approval_spend_limit=500.0, max_spend_limit=1000.0))
 
     base = datetime(2026, 8, 15)
     trip = Trip(
-        user_id=DEMO_USER_ID,
+        user_id=target_user_id,
         name="London Business Trip",
         origin="HYD",
         destination="LHR",
@@ -102,7 +113,7 @@ def seed_demo(db: Session = Depends(get_db)):
     ))
 
     db.commit()
-    return {"message": "Demo seeded", "trip_id": trip.id, "user_id": DEMO_USER_ID}
+    return {"message": "Demo seeded", "trip_id": trip.id, "user_id": target_user_id}
 
 
 @router.post("/disruption")
@@ -151,6 +162,17 @@ def inject_disruption(
     result = report_disruption(disruption_data, db)
     disruption_id = result["id"]
 
+    # Guard: don't start a second pipeline if one is already running for this trip
+    from app.models import RecoveryPlan
+    existing_plan = db.query(RecoveryPlan).filter(RecoveryPlan.trip_id == trip_id).first()
+    if existing_plan and existing_plan.status.value not in ("COMPLETED", "FAILED"):
+        return {
+            "message": "Recovery already in progress",
+            "disruption_id": disruption_id,
+            "plan_id": existing_plan.id,
+            "plan_status": existing_plan.status.value,
+        }
+
     # Kick off the full recovery pipeline asynchronously
     background_tasks.add_task(start_recovery, trip_id, disruption_id)
 
@@ -163,21 +185,24 @@ def inject_disruption(
 
 
 @router.post("/reset")
-def reset_demo(db: Session = Depends(get_db)):
+def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     """Resets the demo trip back to HEALTHY so you can run it again."""
     from app.models import RecoveryPlan, RecoveryAction, DisruptionEvent, AuditLog, Notification
 
-    trip = db.query(Trip).filter(Trip.user_id == DEMO_USER_ID).first()
+    target_uid = user_id if user_id is not None else DEMO_USER_ID
+    trip = db.query(Trip).filter(Trip.user_id == target_uid).first()
     if not trip:
         return {"error": "Demo not seeded yet"}
 
-    # wipe recovery data
+    # wipe recovery data — use explicit object deletion to avoid SQLAlchemy bulk-delete sync issues
     for plan in db.query(RecoveryPlan).filter(RecoveryPlan.trip_id == trip.id).all():
-        db.query(RecoveryAction).filter(RecoveryAction.recovery_plan_id == plan.id).delete()
-    db.query(RecoveryPlan).filter(RecoveryPlan.trip_id == trip.id).delete()
-    db.query(DisruptionEvent).filter(DisruptionEvent.trip_id == trip.id).delete()
-    db.query(AuditLog).filter(AuditLog.trip_id == trip.id).delete()
-    db.query(Notification).filter(Notification.trip_id == trip.id).delete()
+        for action in db.query(RecoveryAction).filter(RecoveryAction.recovery_plan_id == plan.id).all():
+            db.delete(action)
+        db.delete(plan)
+    db.flush()
+    db.query(DisruptionEvent).filter(DisruptionEvent.trip_id == trip.id).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.trip_id == trip.id).delete(synchronize_session=False)
+    db.query(Notification).filter(Notification.trip_id == trip.id).delete(synchronize_session=False)
 
     # reset flight segments to original schedule
     segments = db.query(FlightSegment).filter(FlightSegment.trip_id == trip.id).all()
@@ -189,5 +214,9 @@ def reset_demo(db: Session = Depends(get_db)):
 
     trip.status = TripStatus.HEALTHY
     db.commit()
+
+    # Tell the frontend to clear its recovery cache
+    from app.services.websocket import broadcast
+    broadcast(trip.id, {"event": "TRIP_RESET", "trip_id": trip.id})
 
     return {"message": "Demo reset to HEALTHY", "trip_id": trip.id}

@@ -56,6 +56,7 @@ def start_recovery(trip_id: int, disruption_id: int):
 
 
 def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
+    import time
     trip = db.query(Trip).filter(Trip.id == trip_id).first()
     disruption = db.query(DisruptionEvent).filter(DisruptionEvent.id == disruption_id).first()
     if not trip or not disruption:
@@ -67,6 +68,7 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
     trip.status = TripStatus.DISRUPTED
     db.commit()
     broadcast(trip_id, {"event": "TRIP_STATUS", "status": "DISRUPTED"})
+    time.sleep(1.5)
 
     # ── Step 2: Create recovery plan ─────────────────────────────
     plan = RecoveryPlan(
@@ -78,11 +80,13 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
     db.commit()
     db.refresh(plan)
     broadcast(trip_id, {"event": "RECOVERY_STARTED", "plan_id": plan.id})
+    time.sleep(2)
 
     # ── Step 3: Impact analysis ───────────────────────────────────
     impact = analyze_trip_impact(trip)
     _audit(db, trip_id, plan.id, "IMPACT_ANALYZED", outputs=impact)
     broadcast(trip_id, {"event": "IMPACT_ANALYZED", "impact": impact})
+    time.sleep(1.5)
 
     if not impact["recovery_needed"]:
         plan.status = RecoveryPlanStatus.COMPLETED
@@ -95,6 +99,7 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
     plan.status = RecoveryPlanStatus.PLAN_READY
     db.commit()
     broadcast(trip_id, {"event": "SEARCHING_ALTERNATIVES"})
+    time.sleep(2)
 
     missed_segment = db.query(FlightSegment).filter(
         FlightSegment.trip_id == trip_id,
@@ -150,11 +155,13 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
     explanation = build_score_explanation(best)
 
     broadcast(trip_id, {"event": "ALTERNATIVES_SCORED", "count": len(ranked), "best": best})
+    time.sleep(2)
 
     # ── Step 6: Policy check ──────────────────────────────────────
     plan.status = RecoveryPlanStatus.POLICY_CHECK
     db.commit()
     broadcast(trip_id, {"event": "POLICY_CHECK"})
+    time.sleep(1.5)
 
     extra_cost = best.get("extra_cost_usd", 0)
     policy_result = evaluate_policy(extra_cost, best, policy_dict)
