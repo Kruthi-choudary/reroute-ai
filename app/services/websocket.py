@@ -1,10 +1,13 @@
 """
 WebSocket manager — broadcasts real-time recovery events to the frontend.
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from typing import Dict, List, Optional
 import asyncio
 import json
+
+from jose import JWTError, jwt
+from app.core.auth import SECRET_KEY, ALGORITHM
 
 router = APIRouter()
 
@@ -17,9 +20,36 @@ _main_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 @router.websocket("/ws/{trip_id}")
-async def websocket_endpoint(websocket: WebSocket, trip_id: int):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    trip_id: int,
+    token: Optional[str] = Query(default=None),
+):
     global _main_loop
     _main_loop = asyncio.get_event_loop()
+
+    # Validate JWT — close with 4001 if missing or invalid
+    if not token:
+        await websocket.close(code=4001)
+        return
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        await websocket.close(code=4001)
+        return
+
+    # Verify the trip belongs to this user
+    from app.database import SessionLocal
+    from app.models import Trip
+    db = SessionLocal()
+    try:
+        trip = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user_id).first()
+        if not trip:
+            await websocket.close(code=4003)
+            return
+    finally:
+        db.close()
 
     await websocket.accept()
     _connections.setdefault(trip_id, []).append(websocket)

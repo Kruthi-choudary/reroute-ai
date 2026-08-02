@@ -29,7 +29,16 @@ class PreferenceUpdate(BaseModel):
 def get_policy(user_id: int, db: Session = Depends(get_db)):
     policy = db.query(PolicyRule).filter(PolicyRule.user_id == user_id).first()
     if not policy:
-        raise HTTPException(404, "Policy not found")
+        # Auto-create with sensible defaults on first access
+        policy = PolicyRule(
+            user_id=user_id,
+            auto_spend_limit=50.0,
+            approval_spend_limit=500.0,
+            max_spend_limit=1000.0,
+        )
+        db.add(policy)
+        db.commit()
+        db.refresh(policy)
     return policy
 
 
@@ -52,7 +61,16 @@ def update_policy(user_id: int, data: PolicyUpdate, db: Session = Depends(get_db
 def get_preferences(user_id: int, db: Session = Depends(get_db)):
     pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == user_id).first()
     if not pref:
-        raise HTTPException(404, "Preferences not found")
+        # Auto-create with sensible defaults on first access
+        pref = TravelerPreference(
+            user_id=user_id,
+            preferred_cabin="ECONOMY",
+            seat_preference="WINDOW",
+            preferred_airlines=[],
+        )
+        db.add(pref)
+        db.commit()
+        db.refresh(pref)
     return pref
 
 

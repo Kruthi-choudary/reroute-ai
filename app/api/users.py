@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
+from app.core.auth import get_current_user
 from app.database import get_db
 from app.models import User, TravelerPreference, PolicyRule
 
@@ -47,17 +48,17 @@ def create_user(data: UserCreate, db: Session = Depends(get_db)):
     return {"id": user.id, "email": user.email, "name": user.name}
 
 
-@router.get("/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(404, "User not found")
+@router.get("/me")
+def get_current_user_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return {
-        "id":          user.id,
-        "email":       user.email,
-        "name":        user.name,
-        "phone":       user.phone,
-        "preferences": user.preferences,
-        "policy":      user.policy,
-        "trips":       [{"id": t.id, "name": t.name, "status": t.status} for t in user.trips],
+        "id":          current_user.id,
+        "email":       current_user.email,
+        "name":        current_user.name,
+        "phone":       current_user.phone,
+        "preferences": current_user.preferences,
+        "policy":      current_user.policy,
+        "trips":       [{"id": t.id, "name": t.name, "status": t.status} for t in current_user.trips],
     }

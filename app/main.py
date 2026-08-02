@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+
 from app.core.logging import configure_logging
-from app.database import init_db
-from app.api import trips, disruptions, recovery, policies, notifications, demo, users, auth
+from app.api import trips, disruptions, recovery, policies, notifications, demo, users, auth, hotels
 from app.api.monitor import router as monitor_router
 from app.core.auth import get_current_user
 from app.services.websocket import router as ws_router
@@ -29,9 +31,14 @@ async def _monitor_loop():
             _log.error("monitor_loop_error", extra={"error": str(exc)})
 
 
+def _run_migrations():
+    cfg = AlembicConfig("alembic.ini")
+    alembic_command.upgrade(cfg, "head")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    _run_migrations()
     monitor_task = asyncio.create_task(_monitor_loop())
     yield
     monitor_task.cancel()
@@ -67,6 +74,7 @@ app.include_router(disruptions.router,   prefix="/api/disruptions",   tags=["Dis
 app.include_router(recovery.router,      prefix="/api/recovery",      tags=["Recovery"],      dependencies=_auth_dep)
 app.include_router(policies.router,      prefix="/api/policies",      tags=["Policies"],      dependencies=_auth_dep)
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"], dependencies=_auth_dep)
+app.include_router(hotels.router,        prefix="/api/hotels",        tags=["Hotels"],        dependencies=_auth_dep)
 app.include_router(demo.router,          prefix="/api/demo",          tags=["Demo"])      # open — no auth
 app.include_router(monitor_router,       prefix="/monitor",            tags=["Monitor"])   # open — ops visibility
 app.include_router(ws_router)

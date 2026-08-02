@@ -14,7 +14,8 @@ def _verify_demo_secret(x_demo_secret: str = Header(default="")):
         raise HTTPException(403, "Invalid demo secret")
 from app.models import (
     User, TravelerPreference, PolicyRule, Trip, FlightSegment,
-    HotelBooking, Transfer, TripStatus, FlightStatus, DisruptionType, DisruptionSeverity
+    HotelBooking, Transfer, TripStatus, FlightStatus, DisruptionType, DisruptionSeverity,
+    HotelNotificationStatus,
 )
 
 router = APIRouter(dependencies=[Depends(_verify_demo_secret)])
@@ -100,16 +101,23 @@ def seed_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
         status="CONFIRMED",
     ))
 
-    # Hotel: same day check-in
+    # Hotel: same day check-in — LHR → The Strand Palace Hotel
+    checkin  = base.replace(hour=20, minute=0)   # matches transfer arrival time
+    checkout = checkin.replace(hour=12) + timedelta(days=3)
     db.add(HotelBooking(
         trip_id=trip.id,
         property_name="The Strand Palace Hotel",
         city="London",
-        check_in_date=base,
-        check_out_date=base + timedelta(days=3),
+        hotel_email="reservations@strandpalace.demo",
+        check_in_date=checkin,
+        check_out_date=checkout,
+        original_check_in_date=checkin,
+        original_check_out_date=checkout,
         booking_reference="HTL-LON-001",
         earliest_check_in="14:00",
         latest_check_in="23:59",
+        status="CONFIRMED",
+        notification_status=HotelNotificationStatus.PENDING,
     ))
 
     db.commit()
@@ -213,6 +221,18 @@ def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
         seg.estimated_arrival = seg.scheduled_arrival
 
     trip.status = TripStatus.HEALTHY
+
+    # reset hotel reservation back to original state
+    hotel = db.query(HotelBooking).filter(HotelBooking.trip_id == trip.id).first()
+    if hotel:
+        hotel.status = "CONFIRMED"
+        hotel.notification_status = HotelNotificationStatus.PENDING
+        hotel.notified_at = None
+        if hotel.original_check_in_date:
+            hotel.check_in_date = hotel.original_check_in_date
+        if hotel.original_check_out_date:
+            hotel.check_out_date = hotel.original_check_out_date
+
     db.commit()
 
     # Tell the frontend to clear its recovery cache

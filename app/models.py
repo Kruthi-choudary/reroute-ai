@@ -143,7 +143,7 @@ class Trip(Base):
 
     user             = relationship("User", back_populates="trips")
     flight_segments  = relationship("FlightSegment", back_populates="trip", order_by="FlightSegment.sequence_order")
-    hotel_bookings   = relationship("HotelBooking", back_populates="trip")
+    hotel_bookings   = relationship("HotelBooking", back_populates="trip", cascade="all, delete-orphan")
     transfers        = relationship("Transfer", back_populates="trip")
     disruption_events = relationship("DisruptionEvent", back_populates="trip")
     recovery_plans   = relationship("RecoveryPlan", back_populates="trip")
@@ -175,19 +175,30 @@ class FlightSegment(Base):
     trip = relationship("Trip", back_populates="flight_segments")
 
 
+class HotelNotificationStatus(str, enum.Enum):
+    PENDING  = "PENDING"
+    NOTIFIED = "NOTIFIED"
+    FAILED   = "FAILED"
+
+
 class HotelBooking(Base):
     __tablename__ = "hotel_bookings"
 
-    id                = Column(Integer, primary_key=True, index=True)
-    trip_id           = Column(Integer, ForeignKey("trips.id"), index=True)
-    property_name     = Column(String, nullable=False)
-    city              = Column(String, nullable=False)
-    check_in_date     = Column(DateTime, nullable=False)
-    check_out_date    = Column(DateTime, nullable=False)
-    booking_reference = Column(String, nullable=True)
-    earliest_check_in = Column(String, default="14:00")
-    latest_check_in   = Column(String, default="23:59")
-    status            = Column(String, default="CONFIRMED")
+    id                      = Column(Integer, primary_key=True, index=True)
+    trip_id                 = Column(Integer, ForeignKey("trips.id", ondelete="CASCADE"), index=True)
+    property_name           = Column(String, nullable=False)
+    city                    = Column(String, nullable=False)
+    hotel_email             = Column(String, nullable=True)
+    check_in_date           = Column(DateTime, nullable=False)
+    check_out_date          = Column(DateTime, nullable=False)
+    original_check_in_date  = Column(DateTime, nullable=True)
+    original_check_out_date = Column(DateTime, nullable=True)
+    booking_reference       = Column(String, nullable=True)
+    earliest_check_in       = Column(String, default="14:00")
+    latest_check_in         = Column(String, default="23:59")
+    status                  = Column(String, default="CONFIRMED")
+    notification_status     = Column(SAEnum(HotelNotificationStatus), default=HotelNotificationStatus.PENDING)
+    notified_at             = Column(DateTime, nullable=True)
 
     trip = relationship("Trip", back_populates="hotel_bookings")
 

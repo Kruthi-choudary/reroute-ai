@@ -111,11 +111,24 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
         segments = sorted(trip.flight_segments, key=lambda s: s.sequence_order)
         missed_segment = segments[1] if len(segments) > 1 else segments[0]
 
+    # ── Step 5 (pre): Load user preferences before flight search ─────
+    preferences = {"preferred_airlines": [], "preferred_cabin": None}
+    if trip.user and trip.user.preferences:
+        preferences = {
+            "preferred_airlines": trip.user.preferences.preferred_airlines or [],
+            "preferred_cabin": trip.user.preferences.preferred_cabin,
+        }
+
+    search_cabin = (
+        preferences.get("preferred_cabin")
+        or missed_segment.cabin_class
+        or "ECONOMY"
+    )
     alternatives = search_alternative_flights(
         origin=missed_segment.origin_airport,
         destination=missed_segment.destination_airport,
         date=missed_segment.scheduled_departure.date(),
-        cabin=missed_segment.cabin_class,
+        cabin=search_cabin,
         original_price_usd=missed_segment.price_usd or 0.0,
     )
 
@@ -129,13 +142,6 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
         _notify(db, trip_id, user_id, "No alternative flights found. A support agent will contact you.", "Escalation Required")
         broadcast(trip_id, {"event": "ESCALATED", "reason": policy_result["reason"]})
         return
-
-    # ── Step 5: Score alternatives ────────────────────────────────
-    preferences = {"preferred_airlines": []}
-    if trip.user and trip.user.preferences:
-        preferences = {
-            "preferred_airlines": trip.user.preferences.preferred_airlines or [],
-        }
 
     policy_dict = {"auto_spend_limit": 150, "approval_spend_limit": 500, "max_spend_limit": 1000}
     if trip.user and trip.user.policy:
@@ -259,25 +265,62 @@ def _execute_plan(db: Session, plan: RecoveryPlan, trip: Trip, best_flight: dict
                     pass
             db.commit()
 
-    # Action 2: Modify hotel if needed
-    hotel_impacts = [d for d in impact.get("downstream_impacts", []) if d["type"] == "HOTEL" and d["status"] != "OK"]
-    if hotel_impacts:
-        hotel_key = make_key("MODIFY_HOTEL", {"hotel_impact": hotel_impacts[0]})
-        existing_hotel = db.query(RecoveryAction).filter(RecoveryAction.idempotency_key == hotel_key).first()
-        if not existing_hotel:
-            hotel_action = RecoveryAction(
-                recovery_plan_id=plan.id,
-                action_type=ActionType.MODIFY_HOTEL,
-                status=ActionStatus.COMPLETED,
-                idempotency_key=hotel_key,
-                details=hotel_impacts[0],
-                result={"status": "Hotel notified of late arrival"},
-                executed_at=datetime.utcnow(),
-            )
-            db.add(hotel_action)
-            db.commit()
-            broadcast(trip.id, {"event": "ACTION_COMPLETED", "type": "MODIFY_HOTEL"})
-            results.append(("MODIFY_HOTEL", "COMPLETED"))
+    # Action 2: Notify hotel whenever a flight was rebooked — itinerary changes always affect check-in
+    from app.models import HotelBooking, HotelNotificationStatus
+    from app.services.hotel_notify import notify_hotel_of_delay
+    pending_hotels = (
+        db.query(HotelBooking)
+        .filter(
+            HotelBooking.trip_id == trip.id,
+            HotelBooking.notification_status != HotelNotificationStatus.NOTIFIED,
+        )
+        .all()
+    )
+    for hotel_booking in pending_hotels:
+        hotel_key = make_key("MODIFY_HOTEL", {"hotel_id": hotel_booking.id})
+        if db.query(RecoveryAction).filter(RecoveryAction.idempotency_key == hotel_key).first():
+            continue
+
+        new_eta = best_flight.get("arrival_datetime", "TBD")
+        hotel_name  = hotel_booking.property_name
+        hotel_email = hotel_booking.hotel_email or "reservations@hotel.demo"
+        booking_ref = hotel_booking.booking_reference or "HTL-UNKNOWN"
+        orig_checkin = hotel_booking.original_check_in_date or hotel_booking.check_in_date
+        orig_checkin_str = orig_checkin.strftime("%Y-%m-%d %H:%M") if orig_checkin else "TBD"
+
+        notify_result = notify_hotel_of_delay(
+            hotel_name=hotel_name,
+            hotel_email=hotel_email,
+            booking_reference=booking_ref,
+            original_checkin=orig_checkin_str,
+            new_estimated_arrival=new_eta,
+            delay_minutes=impact.get("delay_minutes", 0),
+            guest_name=trip.user.name if trip.user else "Guest",
+        )
+
+        hotel_booking.notification_status = HotelNotificationStatus.NOTIFIED
+        hotel_booking.notified_at = datetime.utcnow()
+        hotel_booking.status = "UPDATED"
+        if new_eta and new_eta != "TBD":
+            try:
+                hotel_booking.check_in_date = datetime.fromisoformat(new_eta)
+            except (ValueError, TypeError):
+                pass
+        db.commit()
+
+        hotel_action = RecoveryAction(
+            recovery_plan_id=plan.id,
+            action_type=ActionType.MODIFY_HOTEL,
+            status=ActionStatus.COMPLETED,
+            idempotency_key=hotel_key,
+            details={"hotel_id": hotel_booking.id, "hotel_name": hotel_name},
+            result=notify_result,
+            executed_at=datetime.utcnow(),
+        )
+        db.add(hotel_action)
+        db.commit()
+        broadcast(trip.id, {"event": "ACTION_COMPLETED", "type": "MODIFY_HOTEL"})
+        results.append(("MODIFY_HOTEL", "COMPLETED"))
 
     # Action 3: Reschedule transfer if needed
     transfer_impacts = [d for d in impact.get("downstream_impacts", []) if d["type"] == "TRANSFER" and d["status"] != "OK"]
