@@ -2,9 +2,9 @@
 
 Full-stack app that automatically recovers a trip when a flight is disrupted: detects the disruption, scores its impact, decides a recovery action under a user-defined spend policy, rebooks the flight, adjusts hotel reservations, and notifies the traveller — live, over a WebSocket.
 
-This repo is the backend. The frontend lives in a sibling repo: [`ReRoute-ai_frontend`]([(https://github.com/Kruthi-choudary/ReRoute/)]).
+This repo is the backend. The frontend lives in a sibling repo: [`ReRoute-ai_frontend`](https://github.com/Kruthi-choudary/ReRoute/).
 
-
+Built as a group portfolio project.
 
 ## How it works
 
@@ -19,6 +19,7 @@ Background monitor polls active trips
 ```
 
 The LLM (Groq `llama-3.1-8b-instant`) is explanation-only — it never decides or executes a recovery action. All authorization logic lives in `policy_engine.py`; all execution lives in `recovery_orchestrator.py`. If `GROQ_API_KEY` is unset, the agent falls back to a deterministic explanation.
+
 
 ## Tech stack
 
