@@ -2,9 +2,9 @@
 
 Full-stack app that automatically recovers a trip when a flight is disrupted: detects the disruption, scores its impact, decides a recovery action under a user-defined spend policy, rebooks the flight, adjusts hotel reservations, and notifies the traveller — live, over a WebSocket.
 
-This repo is the backend. The frontend lives in a sibling repo: [`ReRoute-ai_frontend`](../ReRoute).
+This repo is the backend. The frontend lives in a sibling repo: [`ReRoute-ai_frontend`]([(https://github.com/Kruthi-choudary/ReRoute/)]).
 
-> **Status:** local prototype, not deployed. Built as a group portfolio project.
+
 
 ## How it works
 
