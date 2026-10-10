@@ -153,6 +153,7 @@ def _run_recovery_pipeline(db: Session, trip_id: int, disruption_id: int):
             "allowed_cabins": p.allowed_cabins,
             "prohibited_airports": p.prohibited_airports,
             "require_same_airline": p.require_same_airline,
+            "original_airline": missed_segment.airline,
         }
 
     original_arrival = missed_segment.scheduled_arrival
