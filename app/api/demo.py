@@ -31,37 +31,24 @@ router = APIRouter(dependencies=[Depends(_verify_demo_secret)])
 DEMO_USER_ID = 1
 
 
-@router.post("/seed")
-def seed_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
-    """Creates the demo HYD→DXB→LHR trip in a HEALTHY state. Call once before the demo.
-    Pass ?user_id=X to seed for a specific user (e.g. the one who signed up via the frontend).
-    """
-    # Use the first user in the DB if no user_id provided
-    target_user = None
-    if user_id:
-        target_user = db.query(User).filter(User.id == user_id).first()
-    if not target_user:
-        target_user = db.query(User).order_by(User.id).first()
+def _seed_trip_for_user(db: Session, user_id: int) -> int:
+    """Creates the HYD→DXB→LHR demo trip (+ prefs/policy defaults) for user_id if they
+    don't already have a trip. Returns the trip id either way. Shared by the open
+    /api/demo/seed endpoint and the authenticated self-serve demo router."""
+    trip = db.query(Trip).filter(Trip.user_id == user_id).first()
+    if trip:
+        return trip.id
 
-    if target_user:
-        # User exists — check if they already have a trip
-        trip = db.query(Trip).filter(Trip.user_id == target_user.id).first()
-        if trip:
-            return {"message": "Already seeded", "trip_id": trip.id, "user_id": target_user.id}
-        # User exists but no trip — create trip for them
-        target_user_id = target_user.id
-    else:
-        # No users at all — create the demo user
-        user = User(email="demo@reroute.ai", name="Demo Traveler", phone="+91-9999999999")
-        db.add(user)
-        db.flush()
-        target_user_id = user.id
-        db.add(TravelerPreference(user_id=target_user_id, preferred_airlines=["EK", "BA"], preferred_cabin="ECONOMY"))
-        db.add(PolicyRule(user_id=target_user_id, auto_spend_limit=150.0, approval_spend_limit=500.0, max_spend_limit=1000.0))
+    if not db.query(TravelerPreference).filter(TravelerPreference.user_id == user_id).first():
+        db.add(TravelerPreference(user_id=user_id, preferred_airlines=["EK", "BA"], preferred_cabin="ECONOMY"))
+    if not db.query(PolicyRule).filter(PolicyRule.user_id == user_id).first():
+        # auto_spend_limit=50 matches the GET /api/policies/ default, so every
+        # fresh demo trip hits the YY202 (+$80) "approval required" golden path.
+        db.add(PolicyRule(user_id=user_id, auto_spend_limit=50.0, approval_spend_limit=500.0, max_spend_limit=1000.0))
 
     base = datetime(2026, 8, 15)
     trip = Trip(
-        user_id=target_user_id,
+        user_id=user_id,
         name="London Business Trip",
         origin="HYD",
         destination="LHR",
@@ -129,22 +116,18 @@ def seed_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     ))
 
     db.commit()
-    return {"message": "Demo seeded", "trip_id": trip.id, "user_id": target_user_id}
+    return trip.id
 
 
-@router.post("/disruption")
-def inject_disruption(
+def _inject_disruption(
+    db: Session,
+    background_tasks: BackgroundTasks,
     trip_id: int,
     delay_minutes: int = 165,
     segment_id: Optional[int] = None,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_db),
-):
-    """
-    Injects a disruption into any trip segment.
-    segment_id: which segment to delay (defaults to the first segment if not specified).
-    This feeds the REAL recovery pipeline — nothing is mocked.
-    """
+) -> dict:
+    """Core disruption-injection logic, shared by the open /api/demo/disruption
+    endpoint and the authenticated self-serve demo router."""
     from app.api.disruptions import DisruptionIn, _report_disruption
     from app.core.recovery_orchestrator import start_recovery
 
@@ -184,6 +167,7 @@ def inject_disruption(
     if existing_plan and existing_plan.status.value not in ("COMPLETED", "FAILED"):
         return {
             "message": "Recovery already in progress",
+            "trip_id": trip_id,
             "disruption_id": disruption_id,
             "plan_id": existing_plan.id,
             "plan_status": existing_plan.status.value,
@@ -194,23 +178,19 @@ def inject_disruption(
 
     return {
         "message": "Disruption injected — recovery pipeline started",
+        "trip_id": trip_id,
         "disruption_id": disruption_id,
         "delay_minutes": delay_minutes,
         "new_arrival": new_arrival.isoformat(),
     }
 
 
-@router.post("/reset")
-def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
-    """Resets the demo trip back to HEALTHY so you can run it again."""
+def _reset_trip_to_healthy(db: Session, trip: Trip) -> None:
+    """Wipes recovery/disruption history and restores the trip + hotel to their
+    original HEALTHY state. Shared by /api/demo/reset and the self-serve router."""
     from app.models import RecoveryPlan, RecoveryAction, DisruptionEvent, AuditLog, Notification
 
-    target_uid = user_id if user_id is not None else DEMO_USER_ID
-    trip = db.query(Trip).filter(Trip.user_id == target_uid).first()
-    if not trip:
-        return {"error": "Demo not seeded yet"}
-
-    # wipe recovery data — use explicit object deletion to avoid SQLAlchemy bulk-delete sync issues
+    # use explicit object deletion to avoid SQLAlchemy bulk-delete sync issues
     for plan in db.query(RecoveryPlan).filter(RecoveryPlan.trip_id == trip.id).all():
         for action in db.query(RecoveryAction).filter(RecoveryAction.recovery_plan_id == plan.id).all():
             db.delete(action)
@@ -220,7 +200,6 @@ def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
     db.query(AuditLog).filter(AuditLog.trip_id == trip.id).delete(synchronize_session=False)
     db.query(Notification).filter(Notification.trip_id == trip.id).delete(synchronize_session=False)
 
-    # reset flight segments to original schedule
     segments = db.query(FlightSegment).filter(FlightSegment.trip_id == trip.id).all()
     for seg in segments:
         seg.status = FlightStatus.SCHEDULED
@@ -230,7 +209,6 @@ def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
 
     trip.status = TripStatus.HEALTHY
 
-    # reset hotel reservation back to original state
     hotel = db.query(HotelBooking).filter(HotelBooking.trip_id == trip.id).first()
     if hotel:
         hotel.status = "CONFIRMED"
@@ -243,8 +221,56 @@ def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
 
     db.commit()
 
-    # Tell the frontend to clear its recovery cache
     from app.services.websocket import broadcast
     broadcast(trip.id, {"event": "TRIP_RESET", "trip_id": trip.id})
 
+
+@router.post("/seed")
+def seed_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """Creates the demo HYD→DXB→LHR trip in a HEALTHY state. Call once before the demo.
+    Pass ?user_id=X to seed for a specific user (e.g. the one who signed up via the frontend).
+    """
+    target_user = None
+    if user_id:
+        target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        target_user = db.query(User).order_by(User.id).first()
+
+    if not target_user:
+        user = User(email="demo@reroute.ai", name="Demo Traveler", phone="+91-9999999999")
+        db.add(user)
+        db.flush()
+        db.commit()
+        target_user = user
+
+    existing = db.query(Trip).filter(Trip.user_id == target_user.id).first()
+    trip_id = _seed_trip_for_user(db, target_user.id)
+    message = "Already seeded" if existing else "Demo seeded"
+    return {"message": message, "trip_id": trip_id, "user_id": target_user.id}
+
+
+@router.post("/disruption")
+def inject_disruption(
+    trip_id: int,
+    delay_minutes: int = 165,
+    segment_id: Optional[int] = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
+    """
+    Injects a disruption into any trip segment.
+    segment_id: which segment to delay (defaults to the first segment if not specified).
+    This feeds the REAL recovery pipeline — nothing is mocked.
+    """
+    return _inject_disruption(db, background_tasks, trip_id, delay_minutes, segment_id)
+
+
+@router.post("/reset")
+def reset_demo(user_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """Resets the demo trip back to HEALTHY so you can run it again."""
+    target_uid = user_id if user_id is not None else DEMO_USER_ID
+    trip = db.query(Trip).filter(Trip.user_id == target_uid).first()
+    if not trip:
+        return {"error": "Demo not seeded yet"}
+    _reset_trip_to_healthy(db, trip)
     return {"message": "Demo reset to HEALTHY", "trip_id": trip.id}

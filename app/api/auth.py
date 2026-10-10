@@ -47,7 +47,7 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
 
     db.add(PolicyRule(
         user_id=user.id,
-        auto_spend_limit=150.0,
+        auto_spend_limit=50.0,
         approval_spend_limit=500.0,
         max_spend_limit=1000.0,
         allowed_cabins=["ECONOMY", "PREMIUM_ECONOMY"],

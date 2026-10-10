@@ -10,7 +10,7 @@ from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
 
 from app.core.logging import configure_logging
-from app.api import trips, disruptions, recovery, policies, notifications, demo, users, auth, hotels
+from app.api import trips, disruptions, recovery, policies, notifications, demo, demo_self, users, auth, hotels
 from app.api.monitor import router as monitor_router
 from app.core.auth import get_current_user
 from app.services.websocket import router as ws_router
@@ -75,7 +75,8 @@ app.include_router(recovery.router,      prefix="/api/recovery",      tags=["Rec
 app.include_router(policies.router,      prefix="/api/policies",      tags=["Policies"],      dependencies=_auth_dep)
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"], dependencies=_auth_dep)
 app.include_router(hotels.router,        prefix="/api/hotels",        tags=["Hotels"],        dependencies=_auth_dep)
-app.include_router(demo.router,          prefix="/api/demo",          tags=["Demo"])      # open — no auth
+app.include_router(demo.router,          prefix="/api/demo",          tags=["Demo"])      # open — no auth, for curl/local testing
+app.include_router(demo_self.router,     prefix="/api/demo/self",     tags=["Demo"],         dependencies=_auth_dep)  # authenticated — safe for the public "Simulate disruption" button
 app.include_router(monitor_router,       prefix="/monitor",            tags=["Monitor"])   # open — ops visibility
 app.include_router(ws_router)
 
