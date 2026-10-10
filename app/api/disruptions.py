@@ -5,8 +5,9 @@ from typing import Optional
 from datetime import datetime
 import hashlib, json
 
+from app.core.auth import get_current_user
 from app.database import get_db
-from app.models import DisruptionEvent, DisruptionType, DisruptionSeverity, FlightSegment, FlightStatus
+from app.models import DisruptionEvent, DisruptionType, DisruptionSeverity, FlightSegment, FlightStatus, Trip, User
 
 router = APIRouter()
 
@@ -21,9 +22,12 @@ class DisruptionIn(BaseModel):
     description:       Optional[str] = None
 
 
-@router.post("/", status_code=201)
-def report_disruption(data: DisruptionIn, db: Session = Depends(get_db)):
-    segment = db.query(FlightSegment).filter(FlightSegment.id == data.flight_segment_id).first()
+def _report_disruption(data: DisruptionIn, db: Session):
+    """Core logic, callable directly (e.g. from the demo router) without the auth dependency."""
+    segment = db.query(FlightSegment).filter(
+        FlightSegment.id == data.flight_segment_id,
+        FlightSegment.trip_id == data.trip_id,
+    ).first()
     if not segment:
         raise HTTPException(404, "Flight segment not found")
 
@@ -78,6 +82,25 @@ def report_disruption(data: DisruptionIn, db: Session = Depends(get_db)):
     return {"id": event.id, "idempotency_key": idempotency_key, "message": "Disruption recorded"}
 
 
+@router.post("/", status_code=201)
+def report_disruption(
+    data: DisruptionIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip = db.query(Trip).filter(Trip.id == data.trip_id, Trip.user_id == current_user.id).first()
+    if not trip:
+        raise HTTPException(404, "Trip not found")
+    return _report_disruption(data, db)
+
+
 @router.get("/{trip_id}")
-def get_disruptions(trip_id: int, db: Session = Depends(get_db)):
+def get_disruptions(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == current_user.id).first()
+    if not trip:
+        raise HTTPException(404, "Trip not found")
     return db.query(DisruptionEvent).filter(DisruptionEvent.trip_id == trip_id).all()

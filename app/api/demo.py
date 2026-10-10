@@ -8,6 +8,14 @@ from app.database import get_db
 
 _DEMO_SECRET = os.getenv("DEMO_SECRET", "")
 
+if not _DEMO_SECRET:
+    import warnings
+    warnings.warn(
+        "DEMO_SECRET is not set — /api/demo/* endpoints are open to anyone with no authentication. "
+        "Fine for local dev; set DEMO_SECRET before deploying anywhere reachable by others.",
+        stacklevel=1,
+    )
+
 
 def _verify_demo_secret(x_demo_secret: str = Header(default="")):
     if _DEMO_SECRET and x_demo_secret != _DEMO_SECRET:
@@ -137,7 +145,7 @@ def inject_disruption(
     segment_id: which segment to delay (defaults to the first segment if not specified).
     This feeds the REAL recovery pipeline — nothing is mocked.
     """
-    from app.api.disruptions import DisruptionIn, report_disruption
+    from app.api.disruptions import DisruptionIn, _report_disruption
     from app.core.recovery_orchestrator import start_recovery
 
     if segment_id:
@@ -167,7 +175,7 @@ def inject_disruption(
         description=f"{segment.flight_number} delayed by {delay_minutes} minutes — {segment.destination_airport} arrival now {new_arrival.strftime('%H:%M')}",
     )
 
-    result = report_disruption(disruption_data, db)
+    result = _report_disruption(disruption_data, db)
     disruption_id = result["id"]
 
     # Guard: don't start a second pipeline if one is already running for this trip
