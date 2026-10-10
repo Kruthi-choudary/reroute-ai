@@ -1,16 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.database import get_db
-from app.models import RecoveryPlan, Trip
+from app.models import RecoveryPlan, Trip, User
 
 router = APIRouter()
 
 
-@router.get("/{trip_id}")
-def get_recovery_state(trip_id: int, db: Session = Depends(get_db)):
-    plan = (
+def _owned_plan_query(db: Session, current_user: User):
+    return (
         db.query(RecoveryPlan)
+        .join(Trip, Trip.id == RecoveryPlan.trip_id)
+        .filter(Trip.user_id == current_user.id)
+    )
+
+
+@router.get("/{trip_id}")
+def get_recovery_state(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    plan = (
+        _owned_plan_query(db, current_user)
         .filter(RecoveryPlan.trip_id == trip_id)
         .order_by(RecoveryPlan.created_at.desc())
         .first()
@@ -30,8 +43,12 @@ def get_recovery_state(trip_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/alternatives")
-def get_alternatives(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(RecoveryPlan).filter(RecoveryPlan.id == plan_id).first()
+def get_alternatives(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    plan = _owned_plan_query(db, current_user).filter(RecoveryPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(404, "Recovery plan not found")
     # alternatives stored in selected_flight JSON during scoring phase
@@ -39,9 +56,14 @@ def get_alternatives(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{plan_id}/approve")
-def approve_recovery(plan_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def approve_recovery(
+    plan_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.core.recovery_orchestrator import execute_recovery_plan
-    plan = db.query(RecoveryPlan).filter(RecoveryPlan.id == plan_id).first()
+    plan = _owned_plan_query(db, current_user).filter(RecoveryPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(404, "Recovery plan not found")
     if plan.status.value != "AWAITING_APPROVAL":
@@ -52,9 +74,13 @@ def approve_recovery(plan_id: int, background_tasks: BackgroundTasks, db: Sessio
 
 
 @router.post("/{plan_id}/reject")
-def reject_recovery(plan_id: int, db: Session = Depends(get_db)):
+def reject_recovery(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.models import RecoveryPlanStatus
-    plan = db.query(RecoveryPlan).filter(RecoveryPlan.id == plan_id).first()
+    plan = _owned_plan_query(db, current_user).filter(RecoveryPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(404, "Recovery plan not found")
     plan.status = RecoveryPlanStatus.FAILED
