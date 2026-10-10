@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 
+from app.core.auth import get_current_user
 from app.database import get_db
-from app.models import PolicyRule, TravelerPreference
+from app.models import PolicyRule, TravelerPreference, User
 
 router = APIRouter()
 
@@ -25,13 +26,13 @@ class PreferenceUpdate(BaseModel):
     seat_preference:    Optional[str] = None
 
 
-@router.get("/{user_id}")
-def get_policy(user_id: int, db: Session = Depends(get_db)):
-    policy = db.query(PolicyRule).filter(PolicyRule.user_id == user_id).first()
+@router.get("/")
+def get_policy(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    policy = db.query(PolicyRule).filter(PolicyRule.user_id == current_user.id).first()
     if not policy:
         # Auto-create with sensible defaults on first access
         policy = PolicyRule(
-            user_id=user_id,
+            user_id=current_user.id,
             auto_spend_limit=50.0,
             approval_spend_limit=500.0,
             max_spend_limit=1000.0,
@@ -42,11 +43,11 @@ def get_policy(user_id: int, db: Session = Depends(get_db)):
     return policy
 
 
-@router.put("/{user_id}")
-def update_policy(user_id: int, data: PolicyUpdate, db: Session = Depends(get_db)):
-    policy = db.query(PolicyRule).filter(PolicyRule.user_id == user_id).first()
+@router.put("/")
+def update_policy(data: PolicyUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    policy = db.query(PolicyRule).filter(PolicyRule.user_id == current_user.id).first()
     if not policy:
-        policy = PolicyRule(user_id=user_id)
+        policy = PolicyRule(user_id=current_user.id)
         db.add(policy)
 
     for field, value in data.model_dump(exclude_none=True).items():
@@ -57,13 +58,13 @@ def update_policy(user_id: int, data: PolicyUpdate, db: Session = Depends(get_db
     return policy
 
 
-@router.get("/{user_id}/preferences")
-def get_preferences(user_id: int, db: Session = Depends(get_db)):
-    pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == user_id).first()
+@router.get("/preferences")
+def get_preferences(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == current_user.id).first()
     if not pref:
         # Auto-create with sensible defaults on first access
         pref = TravelerPreference(
-            user_id=user_id,
+            user_id=current_user.id,
             preferred_cabin="ECONOMY",
             seat_preference="WINDOW",
             preferred_airlines=[],
@@ -74,11 +75,11 @@ def get_preferences(user_id: int, db: Session = Depends(get_db)):
     return pref
 
 
-@router.put("/{user_id}/preferences")
-def update_preferences(user_id: int, data: PreferenceUpdate, db: Session = Depends(get_db)):
-    pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == user_id).first()
+@router.put("/preferences")
+def update_preferences(data: PreferenceUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    pref = db.query(TravelerPreference).filter(TravelerPreference.user_id == current_user.id).first()
     if not pref:
-        pref = TravelerPreference(user_id=user_id)
+        pref = TravelerPreference(user_id=current_user.id)
         db.add(pref)
 
     for field, value in data.model_dump(exclude_none=True).items():
