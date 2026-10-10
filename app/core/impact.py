@@ -38,6 +38,18 @@ def analyze_trip_impact(trip: Trip, min_connection_minutes: int = DEFAULT_MIN_CO
     Returns a structured impact report used by the recovery agent.
     """
     segments: List[FlightSegment] = sorted(trip.flight_segments, key=lambda s: s.sequence_order)
+    if not segments:
+        return {
+            "trip_id": trip.id,
+            "connection_broken": False,
+            "broken_at": None,
+            "missed_flight": None,
+            "delay_minutes": 0,
+            "final_arrival": None,
+            "connection_impacts": [],
+            "downstream_impacts": [],
+            "recovery_needed": False,
+        }
     impacts = []
     connection_broken = False
     broken_at_segment = None
