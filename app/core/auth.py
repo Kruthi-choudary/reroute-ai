@@ -11,16 +11,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
 
-_DEFAULT_SECRET = "dev-secret-change-in-prod"
-SECRET_KEY = os.getenv("JWT_SECRET", _DEFAULT_SECRET)
+SECRET_KEY = os.getenv("JWT_SECRET")
 ALGORITHM  = "HS256"
 TOKEN_TTL_MINUTES = 60 * 24 * 7  # 7 days
 
-if SECRET_KEY == _DEFAULT_SECRET:
-    import warnings
-    warnings.warn(
-        "JWT_SECRET is using the insecure default. Set a strong random value in .env.",
-        stacklevel=1,
+if not SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is not set. "
+        "Set a long random value in .env — there is no insecure default to fall back to."
     )
 
 _bearer = HTTPBearer(auto_error=False)
