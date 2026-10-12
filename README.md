@@ -1,6 +1,6 @@
 # ReRoute AI — Travel Disruption Concierge
 
-**Live:** https://reroute-ai.onrender.com (API only — https://re-route-sandy.vercel.app is the actual app)
+**Live:** https://reroute-ai.onrender.com-(API only ) https://re-route-sandy.vercel.app is the actual app
 
 ## The problem
 
