@@ -6,6 +6,8 @@ This repo is the backend. The frontend lives in a sibling repo: [`ReRoute-ai_fro
 
 Built as a group portfolio project.
 
+**Live:** https://reroute-ai.onrender.com (API only — the frontend at https://re-route-sandy.vercel.app is the actual app to click through)
+
 ## How it works
 
 ```
@@ -71,7 +73,7 @@ See `.env.example`. Key ones:
 
 ## API
 
-All routes under `/api/*` except `/api/demo/*` (open, for seeding/resetting demo data) and `/monitor` (ops visibility) require a JWT bearer token.
+All routes under `/api/*` require a JWT bearer token, except `/api/auth`, `/api/demo/*` (open, `DEMO_SECRET`-gated — for curl/local testing against any trip), and `/monitor` (ops visibility).
 
 | Router | Prefix |
 |---|---|
@@ -83,6 +85,7 @@ All routes under `/api/*` except `/api/demo/*` (open, for seeding/resetting demo
 | Policies | `/api/policies` |
 | Notifications | `/api/notifications` |
 | Hotels | `/api/hotels` |
-| Demo (seed/reset/trigger) | `/api/demo` |
+| Demo — open, curl-friendly (seed/reset/trigger any trip by id) | `/api/demo` |
+| Demo — authenticated self-serve (powers the frontend's "Simulate disruption" button; always acts on the caller's own trip) | `/api/demo/self` |
 
-Interactive docs at `http://localhost:8000/docs`.
+Interactive docs at `http://localhost:8000/docs` (local) or `https://reroute-ai.onrender.com/docs` (live).
