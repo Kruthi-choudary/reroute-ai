@@ -32,8 +32,23 @@ async def _monitor_loop():
 
 
 def _run_migrations():
+    from sqlalchemy import inspect
+    from app.database import engine
+    from app.models import Base as ModelsBase
+
     cfg = AlembicConfig("alembic.ini")
-    alembic_command.upgrade(cfg, "head")
+
+    if not inspect(engine).has_table("users"):
+        # Brand-new database (e.g. first deploy): the earliest migrations assume
+        # the base schema already exists (it historically did, via Base.metadata.create_all()
+        # before Alembic was introduced) and only apply incremental ALTER TABLEs on top of it.
+        # Create the full current schema directly instead, then mark it as already
+        # being at head so those incremental migrations don't try to re-add columns
+        # that already exist.
+        ModelsBase.metadata.create_all(bind=engine)
+        alembic_command.stamp(cfg, "head")
+    else:
+        alembic_command.upgrade(cfg, "head")
 
 
 @asynccontextmanager
