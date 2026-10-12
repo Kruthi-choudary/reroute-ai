@@ -3,7 +3,6 @@ import logging
 import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from alembic import command as alembic_command
@@ -95,7 +94,6 @@ app.include_router(demo_self.router,     prefix="/api/demo/self",     tags=["Dem
 app.include_router(monitor_router,       prefix="/monitor",            tags=["Monitor"])   # open — ops visibility
 app.include_router(ws_router)
 
-app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
 
 
 @app.get("/")

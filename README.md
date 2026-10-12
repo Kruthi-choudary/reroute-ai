@@ -88,7 +88,6 @@ app/
   core/       auth, policy_engine, recovery_orchestrator, impact/scoring, logging
   agent/      AI recovery agent (Groq) — reasoning/explanation only
   services/   websocket broadcast, flight monitor polling, hotel notifications
-  static/     demo UI, served at /ui
 migrations/   Alembic
 ```
 
