@@ -1,6 +1,8 @@
 # ReRoute AI — Travel Disruption Concierge
 
-**Live:** https://reroute-ai.onrender.com-(API only ) https://re-route-sandy.vercel.app is the actual app
+**Live app:** https://re-route-sandy.vercel.app · **Live API:** https://reroute-ai.onrender.com
+
+**Repos:** this is the backend. Frontend → [`ReRoute-ai_frontend`](https://github.com/Kruthi-choudary/ReRoute/)
 
 ## The problem
 
@@ -36,15 +38,30 @@ This is the actual interesting part of the system: it's not "AI books whatever,"
 
 ## Architecture
 
+Components and how they talk to each other — distinct from the step-by-step pipeline above, which is the sequence *within* a single disruption:
+
 ```
-Background monitor polls active trips
-        -> disruption detected
-        -> impact scored (app/core/impact.py, scoring.py)
-        -> policy engine decides: AUTO / AWAITING_APPROVAL / ESCALATE
-        -> recovery orchestrator runs: rebook flight -> modify hotel -> notify traveller
-        -> AI agent (Groq) explains the decision in plain language
-        -> WebSocket pushes live status to the frontend
+TanStack Start Frontend  (re-route-sandy.vercel.app)
+  |  HTTPS + JWT  ->  REST API (auth / trips / policies / recovery / hotels)
+  |  WebSocket    <-  WebSocket server (/ws/{trip_id})
+  v
+FastAPI Backend  (reroute-ai.onrender.com)
+  |
+  +-- Background monitor — polls active trips, finds disruptions
+  |
+  +-- Recovery orchestrator — runs the pipeline once a disruption is found
+  |     |
+  |     +-- Policy engine (deterministic, no LLM) — AUTO / APPROVAL / ESCALATE
+  |     +-- AI agent — explains the decision via Groq LLM API
+  |     +-- pushes every step live to the WebSocket server above
+  |
+  +-- Database — SQLite (dev) / Postgres (prod-ready)
+
+Optional: AirLabs API for real flight data (FLIGHT_DATA_PROVIDER=airlabs);
+simulated data is the default.
 ```
+
+Every write in the REST API and every action in the recovery orchestrator resolves its target (trip, policy, recovery plan) from the caller's JWT — there's no endpoint that takes a raw `user_id` from the client.
 
 ## Tech stack
 
@@ -120,5 +137,3 @@ All routes under `/api/*` require a JWT bearer token, except `/api/auth`, `/api/
 | Demo — authenticated self-serve (powers the frontend's "Simulate disruption" button; always acts on the caller's own trip) | `/api/demo/self` |
 
 Interactive docs at `http://localhost:8000/docs` (local) or `https://reroute-ai.onrender.com/docs` (live).
-
-This repo is the backend. Frontend: [`ReRoute-ai_frontend`](https://github.com/Kruthi-choudary/ReRoute/).
